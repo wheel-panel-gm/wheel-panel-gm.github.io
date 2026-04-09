@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fortune wheel access</title>
+    <style>
+        body {
+            background-color: #000000;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Consolas, monospace;
+            overflow: hidden;
+        }
+        .view-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 35px; 
+            width: 100%;
+        }
+        #code-view {
+            display: none;
+        }
+        .prompt-label {
+            color: #d8d8d8;
+            font-size: 32px;
+            margin-bottom: -25px; 
+            text-align: center;
+        }
+        .error-label {
+            color: #e57373;
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: -20px;
+            text-align: center;
+            min-height: 50px;
+        }
+        input {
+            background-color: #1a1d22;
+            border: 2px solid #3b4046;
+            border-radius: 6px;
+            padding: 18px;
+            color: white;
+            font-size: 28px;
+            font-family: Consolas, monospace;
+            width: 500px;
+            box-sizing: border-box;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border: 2px solid #6b7b8f;
+        }
+        button.primary-btn {
+            background-color: #1a1d22;
+            border: 2px solid #3b4046;
+            border-radius: 6px;
+            color: white;
+            padding: 18px 25px;
+            font-family: Consolas, monospace;
+            font-size: 26px;
+            width: 500px;
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        button.primary-btn:hover {
+            background-color: #2b2f36;
+            border-color: #4b5563;
+        }
+        button.primary-btn:active {
+            background-color: #101215;
+        }
+        button.secondary-btn {
+            background-color: transparent;
+            border: none;
+            color: #6b7b8f;
+            font-size: 20px;
+            font-family: Consolas, monospace;
+            cursor: pointer;
+            margin-top: -20px;
+            transition: color 0.2s;
+        }
+        button.secondary-btn:hover {
+            color: #d8d8d8;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="phone-view" class="view-container">
+        <div class="prompt-label">Введите номер телефона</div>
+        <input type="text" id="phone-input" placeholder="+7 (___) ___-__-__" autocomplete="off">
+        <button id="phone-submit" class="primary-btn">Войти</button>
+        <div id="phone-error" class="error-label"></div>
+    </div>
+
+    <div id="code-view" class="view-container">
+        <div class="prompt-label">Введите 5-значный код из SMS</div>
+        <input type="text" id="code-input" placeholder="XXXXX" maxlength="5" autocomplete="off">
+        <button id="code-submit" class="primary-btn">Войти</button>
+        <button id="back-button" class="secondary-btn">← Назад к вводу номера</button>
+        <div id="code-error" class="error-label"></div>
+    </div>
+
+    <script>
+        const phoneView = document.getElementById('phone-view');
+        const codeView = document.getElementById('code-view');
+        
+        const phoneInput = document.getElementById('phone-input');
+        const phoneSubmit = document.getElementById('phone-submit');
+        const phoneError = document.getElementById('phone-error');
+        
+        const codeInput = document.getElementById('code-input');
+        const codeSubmit = document.getElementById('code-submit');
+        const codeError = document.getElementById('code-error');
+        const backButton = document.getElementById('back-button');
+        let attempts = 0;
+
+        // ==========================================
+        // БЕЗОПАСНОСТЬ: ШИФРОВАНИЕ НОМЕРОВ (SHA-256)
+        // ==========================================
+
+        // 1. Сюда вы вставите зашифрованные номера из консоли (пока тут пусто)
+        const allowedHashes = [];
+
+        // 2. ВАШИ ОТКРЫТЫЕ НОМЕРА (УДАЛИТЕ ИХ ПОСЛЕ ТОГО КАК СКОПИРУЕТЕ ХЕШИ ИЗ КОНСОЛИ)
+        const rawNumbers = [
+            "79165438891", "79261234567", "79039876543", "79991112233", "79154445566",
+            "79257778899", "79051110022", "79773334455", "79105556677", "79298889900",
+            "79601239988", "79168887766", "79269991122", "79031238901", "79992349012",
+            "79153450123", "79254561234", "79055672345", "79776783456", "79107894567"
+        ];
+
+        // Функция для криптографического шифрования введенного номера
+        async function hashNumber(phone) {
+            const salt = "fortune_secret_"; // Добавляем слово-соль для усложнения взлома
+            const msgUint8 = new TextEncoder().encode(salt + phone);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Помощник: Автоматически шифрует открытые номера и выводит их в консоль браузера (F12)
+        if (rawNumbers.length > 0) {
+            window.addEventListener('load', async () => {
+                const hashes = await Promise.all(rawNumbers.map(num => hashNumber(num)));
+                console.warn("ВНИМАНИЕ! Чтобы скрыть номера от пользователей, скопируйте массив ниже и вставьте его в 'allowedHashes', а массив 'rawNumbers' полностью очистите!");
+                console.log(JSON.stringify(hashes, null, 4));
+            });
+        }
+        // ==========================================
+
+        window.onload = () => phoneInput.focus();
+
+        phoneInput.addEventListener('focus', () => {
+            if (!phoneInput.value) {
+                phoneInput.value = '+7 (';
+                setTimeout(() => phoneInput.setSelectionRange(4, 4), 0);
+            }
+        });
+
+        phoneInput.addEventListener('blur', () => {
+            if (phoneInput.value === '+7 (') phoneInput.value = '';
+        });
+
+        phoneInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace') {
+                if (phoneInput.value === '+7 (') {
+                    e.preventDefault();
+                    return;
+                }
+                let start = this.selectionStart;
+                let end = this.selectionEnd;
+                if (start === end && start > 0) {
+                    let prevChar = this.value[start - 1];
+                    if (/\D/.test(prevChar)) {
+                        e.preventDefault();
+                        let val = this.value;
+                        let removeIdx = start - 1;
+                        while(removeIdx > 0 && /\D/.test(val[removeIdx])) {
+                            removeIdx--;
+                        }
+                        if (removeIdx > 1) {
+                            this.value = val.substring(0, removeIdx) + val.substring(removeIdx + 1);
+                            this.setSelectionRange(removeIdx, removeIdx);
+                            this.dispatchEvent(new Event('input'));
+                        }
+                    }
+                }
+            }
+        });
+
+        phoneInput.addEventListener('input', function(e) {
+            let input = e.target;
+            let cursorPosition = input.selectionStart;
+            let valueBeforeCursor = input.value.substring(0, cursorPosition);
+            let digitsBeforeCursor = valueBeforeCursor.replace(/\D/g, '').length;
+
+            let digits = input.value.replace(/\D/g, ''); 
+
+            if (digits.length <= 1) {
+                input.value = '+7 (';
+                setTimeout(() => input.setSelectionRange(4, 4), 0);
+                return;
+            }
+
+            if (digits.length >= 11) {
+                let coreNumber = digits.slice(-10); 
+                digits = '7' + coreNumber;
+            } else {
+                if (digits.startsWith('8')) digits = '7' + digits.substring(1);
+                else if (!digits.startsWith('7')) digits = '7' + digits;
+            }
+
+            digits = digits.substring(0, 11);
+
+            let formatted = '+7 (';
+            if (digits.length > 1) formatted += digits.substring(1, 4);
+            if (digits.length >= 4) formatted += ') ' + digits.substring(4, 7);
+            if (digits.length >= 7) formatted += '-' + digits.substring(7, 9);
+            if (digits.length >= 9) formatted += '-' + digits.substring(9, 11);
+
+            input.value = formatted;
+
+            let newCursorPosition = formatted.length;
+            let digitCount = 0;
+            
+            for (let i = 0; i < formatted.length; i++) {
+                if (digitCount === digitsBeforeCursor) {
+                    newCursorPosition = i;
+                    break;
+                }
+                if (/\d/.test(formatted[i])) digitCount++;
+            }
+
+            if (newCursorPosition < 4) newCursorPosition = 4;
+            input.setSelectionRange(newCursorPosition, newCursorPosition);
+        });
+
+        // Теперь функция асинхронная, так как шифрование требует времени (доли секунды)
+        async function handlePhoneSubmit() {
+            const digits = phoneInput.value.replace(/\D/g, '');
+            
+            if (digits.length !== 11 || !digits.startsWith('7')) {
+                phoneError.innerText = 'Пожалуйста, введите корректный номер телефона';
+                return;
+            }
+
+            // Шифруем номер, который только что ввел пользователь
+            const inputHash = await hashNumber(digits);
+
+            // Проверяем: совпадает ли зашифрованный ввод с нашими сохраненными зашифрованными номерами
+            // (или с открытыми номерами, если вы их еще не удалили)
+            if (allowedHashes.includes(inputHash) || rawNumbers.includes(digits)) {
+                phoneError.innerText = '';
+                phoneView.style.display = 'none';
+                codeView.style.display = 'flex';
+                
+                codeInput.value = '';
+                codeError.innerText = '';
+                attempts = 0;
+                codeInput.focus();
+            } else {
+                phoneError.innerText = 'К сожалению, войти с этим номером не получится.\nПроверьте правильность ввода.';
+            }
+        }
+
+        phoneSubmit.addEventListener('click', handlePhoneSubmit);
+        phoneInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handlePhoneSubmit();
+        });
+
+        backButton.addEventListener('click', function() {
+            codeView.style.display = 'none';
+            phoneView.style.display = 'flex';
+            phoneInput.focus();
+        });
+
+        function handleCodeSubmit() {
+            if (attempts >= 3) {
+                codeError.innerHTML = "Превышено количество попыток.<br>Пожалуйста, повторите позже.";
+                return;
+            }
+            const code = codeInput.value;
+            if (!code.trim()) {
+                codeError.innerText = "Пожалуйста, введите код";
+                return;
+            } else if (!/^\d{5}$/.test(code)) {
+                codeError.innerText = "Код должен состоять из 5 цифр";
+                return;
+            }
+            attempts++;
+            if (attempts >= 3) {
+                codeError.innerHTML = "Превышено количество попыток.<br>Пожалуйста, повторите позже.";
+            } else {
+                codeError.innerText = "Неверный код. Пожалуйста, попробуйте еще раз.";
+                codeInput.value = '';
+                codeInput.focus();
+            }
+        }
+
+        codeSubmit.addEventListener('click', handleCodeSubmit);
+        codeInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handleCodeSubmit();
+        });
+    </script>
+</body>
+</html>
